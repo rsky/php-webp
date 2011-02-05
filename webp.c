@@ -252,8 +252,6 @@ static PHP_FUNCTION(imagecreatefromwebp)
 	result = WebPDecode((const uint8 *)data, (int)data_size,
 			&Y, &U, &V, &width, &height);
 	if (result == webp_failure) {
-		if (V) { free(V); }
-		if (U) { free(U); }
 		if (Y) { free(Y); }
 		efree(data);
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to decode WebP image");
