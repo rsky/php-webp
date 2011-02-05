@@ -44,12 +44,11 @@ extern "C" {
 #include <php.h>
 #include <ext/standard/info.h>
 #include <Zend/zend_extensions.h>
-#ifdef HAVE_GD_BUNDLED
+#ifndef HAVE_GD_BUNDLED
+#include <gd.h>
+#else
 #include <ext/gd/libgd/gd.h>
 #include <ext/gd/libgd/gdhelpers.h>
-#else
-#include <gd.h>
-#endif
 
 #if PHP_VERSION_ID >= 50300
 #define PHP_WEBP_USE_GD_WREPPER
@@ -65,14 +64,15 @@ ZEND_END_MODULE_GLOBALS(webp)
 #else
 #define WEBPG(v) (webp_globals.v)
 #endif
-#endif
+#endif /* PHP >= 5.3 */
+
+#endif /* HAVE_GD_BUNDLED */
 
 #ifdef  __cplusplus
-} // extern "C"
+} /* extern "C" */
 #endif
 
 #endif /* PHP_WEBP_H */
-
 
 /*
  * Local variables:
