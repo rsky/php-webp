@@ -1,6 +1,10 @@
 <?php
 chdir(dirname(__FILE__));
 require_once './RIFF.php';
+function webp_read_metadata($filename)
+{
+    return WebP::createFromFile($filename)->getMetadata();
+}
 
 $im = imagecreatefrompng('Lenna.png');
 imagewebp($im, 'Lenna.webp', 24, $difference);
