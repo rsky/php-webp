@@ -54,9 +54,14 @@ abstract class RIFFChunk
         return $this->data;
     }
 
+    public function getRawData()
+    {
+        return $this->data;
+    }
+
     public function dump()
     {
-        return self::pack($this->id, $this->size, $this->data);
+        return self::pack($this->id, $this->size, $this->getRawData());
     }
 
     public function dumpToFile($filename)
@@ -136,31 +141,34 @@ class RIFFStringChunk extends RIFFBinaryChunk
 
 abstract class RIFFListChunk extends RIFFChunk
 {
-    protected $type;
     protected $chunks = array();
 
     public function __construct($source)
     {
         parent::__construct($source);
-        if (strlen($this->data) < 4) {
-            $this->raiseError();
-        }
-        $this->type = substr($this->data, 0, 4);
+        $type = substr($this->data, 0, 4);
+        self::checkId($type);
         $this->parseSubChunks(substr($this->data, 4));
+        $this->data = $type;
     }
 
-    public function dump()
+    public function getType()
     {
-        $dump = self::pack($this->id, $this->size, $this->type);
-        foreach ($this->chunks as $chunk) {
-            $dump .= $chunk->dump();
-        }
-        return $dump;
+        return $this->data;
     }
 
-    public function getAllChunks()
+    public function getData()
     {
         return $this->chunks;
+    }
+
+    public function getRawData()
+    {
+        $data = $this->data;
+        foreach ($this->chunks as $chunk) {
+            $data .= $chunk->dump();
+        }
+        return $data;
     }
 
     protected function getChunk($tag)
@@ -256,10 +264,10 @@ class WebP extends RIFF
     public function __construct($source)
     {
         parent::__construct($source);
-        if ($this->type !== self::TAG_WEBP) {
+        if ($this->getType() !== self::TAG_WEBP) {
             $this->raiseError();
         }
-        if (substr($this->data, 4, 4) !== self::TAG_VP8) {
+        if (key($this->chunks) !== self::TAG_VP8) {
             $this->raiseError();
         }
     }
@@ -345,7 +353,7 @@ function webp_read_metadata($filename)
 {
     $metadata = array();
     $webp = WebP::createFromFile($filename);
-    foreach ($webp->getAllChunks() as $tag => $chunk) {
+    foreach ($webp->getData() as $tag => $chunk) {
         if ($tag !== WebP::TAG_VP8) {
             $metadata[$tag] = $chunk->getData();
         }
