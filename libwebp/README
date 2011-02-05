@@ -1,0 +1,10 @@
+This library contains encoder/decoder for WEBP image and a
+command line tool to convert between images of different format.
+
+See http://code.google.com/speed/webp
+
+
+It is released under the same license as the WebM project.
+See http://www.webmproject.org/license/software/ or the
+file "COPYING" file for details. An additional intellectual
+property rights grant can be found in the file PATENTS.
