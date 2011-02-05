@@ -10,6 +10,23 @@ abstract class RIFFChunk
     public function __construct($source)
     {
         if (is_array($source)) {
+            if (!array_key_exists('id', $source)
+                || !is_string($source['id'])
+                || self::checkId($source['id'])
+            ) {
+                $this->raiseError();
+            }
+            if (!array_key_exists('size', $source)
+                || !is_int($source['size'])
+            ) {
+                $this->raiseError();
+            }
+            if (!array_key_exists('data', $source)
+                || !is_string($source['data'])
+                || strlen($source['data']) !== $source['size']
+            ) {
+                $this->raiseError();
+            }
             $chunkInfo = $source;
         } else {
             $chunkInfo = $this->parseChunk($source);
@@ -39,7 +56,7 @@ abstract class RIFFChunk
 
     public function dump()
     {
-        return $this->id . pack('V', $this->size) . $this->data;
+        return self::pack($this->id, $this->size, $this->data);
     }
 
     public function dumpToFile($filename)
@@ -54,15 +71,16 @@ abstract class RIFFChunk
             $this->raiseError();
         }
 
-        $size = unpack('V', substr($source, 4, 4));
-        if (8 + $size[1] > $length) {
+        $arr = unpack('V', substr($source, 4, 4));
+        $size = $arr[1];
+        if (8 + $size > $length) {
             $this->raiseError();
         }
 
         return array(
             'id' => substr($source, 0, 4),
-            'size' => $size[1],
-            'data' => substr($source, 8, $size[1]),
+            'size' => $size,
+            'data' => substr($source, 8, $size),
         );
     }
 
@@ -73,9 +91,14 @@ abstract class RIFFChunk
         throw new RIFFException($message, $code);
     }
 
+    protected static function pack($id, $size, $data)
+    {
+        return $id . pack('V', $size) . $data;
+    }
+
     protected static function checkId($id)
     {
-        if (!preg_match('/^[0-9A-Za-z_]{4}$/', $id)) {
+        if (strlen($id) !== 4 || !preg_match('/^[0-9A-Za-z_ ]+$/', $id)) {
             throw new RIFFException("Not a valid RIFF ID.");
         }
     }
@@ -85,17 +108,12 @@ class RIFFBinaryChunk extends RIFFChunk
 {
     public static function createFromBinary($id, $data)
     {
-        self::checkId($id);
-        if (function_exists('get_called_class')) {
-            $className = get_called_class();
-        } else {
-            $className = __CLASS__;
-        }
-        return new $className($id . pack('V', strlen($data)) . $data);
+        $size = strlen($data);
+        return new static(compact('id', 'size', 'data'));
     }
 }
 
-class RIFFStringChunk extends RIFFChunk
+class RIFFStringChunk extends RIFFBinaryChunk
 {
     public function __construct($source)
     {
@@ -105,17 +123,9 @@ class RIFFStringChunk extends RIFFChunk
         }
     }
 
-    public static function createFromString($id, $string)
+    public static function createFromString($id, $str)
     {
-        self::checkId($id);
-        if (function_exists('get_called_class')) {
-            $className = get_called_class();
-        } else {
-            $className = __CLASS__;
-        }
-        return new $className(
-            $id . pack('V', strlen($string) + 1) . $string . chr(0)
-        );
+        return static::createFromBinary($id, $str . chr(0));
     }
 
     public function getData()
@@ -141,7 +151,7 @@ abstract class RIFFListChunk extends RIFFChunk
 
     public function dump()
     {
-        $dump = $this->id . pack('V', $this->size) . $this->type;
+        $dump = self::pack($this->id, $this->size, $this->type);
         foreach ($this->chunks as $chunk) {
             $dump .= $chunk->dump();
         }
@@ -238,12 +248,8 @@ class WebP extends RIFF
     public static function createFromVP8Image($data)
     {
         $size = strlen($data);
-        $webp = RIFF::TAG_RIFF
-              . pack('V', $size + 12)
-              . self::TAG_WEBP
-              . self::TAG_VP8
-              . pack('V', $size)
-              . $data;
+        $webp = self::pack(RIFF::TAG_RIFF, $size + 12, self::TAG_WEBP)
+              . self::pack(self::TAG_VP8, $size, $data);
         return new WebP($webp);
     }
 
