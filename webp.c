@@ -35,8 +35,6 @@
 #define MAX_QUALITY 63
 #define MIN_QUALITY 0
 
-/* }}} _od_is_little_endian */
-
 /* {{{ globals */
 
 static int le_gd;
