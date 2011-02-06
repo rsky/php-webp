@@ -18,7 +18,7 @@ if test "$PHP_WEBP" != "no"; then
 [AC_MSG_ERROR([need at least PHP 5.2.0])])
 
   dnl
-  dnl Check the zlib support
+  dnl Check the libvpx support
   dnl
   if test "$PHP_WEBP_VPX_DIR" != "yes"; then
     if test -r "$PHP_WEBP_VPX_DIR/include/vpx/vp8.h"; then
