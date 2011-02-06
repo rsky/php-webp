@@ -351,7 +351,7 @@ static PHP_FUNCTION(imagewebp)
 	uv_nmemb = (size_t)(uv_width * uv_height);
 	pix_buf = (uint32 *)ecalloc(y_nmemb, sizeof(uint32));
 	yuv_buf = (uint8 *)ecalloc(y_nmemb + 2 * uv_nmemb, sizeof(uint8));
-	if (pix_buf == NULL || y_ptr == NULL) {
+	if (pix_buf == NULL || yuv_buf == NULL) {
 		if (yuv_buf) {
 			efree(yuv_buf);
 		}
