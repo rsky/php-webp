@@ -30,7 +30,7 @@
 #include "php_webp.h"
 #include "libwebp/src/webpimg.h"
 
-#define MAX_IMAGE_SIDE_LENGTH 16384
+#define MAX_IMAGE_SIDE_LENGTH 16383
 #define DEFAULT_QP 20
 #define MAX_QP 63
 #define MIN_QP 0
