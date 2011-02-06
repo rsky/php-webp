@@ -31,7 +31,7 @@ abstract class RIFFChunk
                 throw new InvalidArgumentException('Chunk data must be a string');
             }
             if (!$this->checkTag($source['id'])) {
-                throw new RIFFException('Invalid chunk id');
+                $this->raiseError('Invalid chunk id');
             }
             if ($source['size'] !== strlen($source['data'])) {
                 $this->raiseError('Chunk size does not equal to actual data size');
