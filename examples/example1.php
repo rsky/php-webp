@@ -7,7 +7,7 @@ function webp_read_metadata($filename)
 }
 
 $im = imagecreatefrompng('Lenna.png');
-imagewebp($im, 'Lenna.webp', 24, $difference);
+imagewebp($im, 'Lenna.webp', WEBP_DEFAULT_QUALITY, $difference);
 var_dump($difference);
 
 $webp = WebP::createFromFile('Lenna.webp');
