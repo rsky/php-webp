@@ -111,9 +111,7 @@ abstract class RIFFChunk
 
     protected function checkTag($id)
     {
-        if (strlen($id) === 4
-            && preg_match('/^[0-9A-Za-z][0-9A-Za-z_ ]+$/', $id)
-        ) {
+        if (preg_match('/^[0-9A-Za-z][0-9A-Za-z_ ]{3}$/', $id)) {
             return true;
         }
         return false;
