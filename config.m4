@@ -11,7 +11,7 @@ if test "$PHP_WEBP" != "no"; then
   AC_MSG_CHECKING(PHP version)
   AC_TRY_COMPILE([#include <php_version.h>], [
 #if !defined(PHP_VERSION_ID) || PHP_VERSION_ID < 50200
-#error this extension requires at least PHP version 5.1.0rc1
+#error this extension requires at least PHP version 5.2.0
 #endif
 ],
 [AC_MSG_RESULT(ok)],
@@ -20,26 +20,29 @@ if test "$PHP_WEBP" != "no"; then
   dnl
   dnl Check the libvpx support
   dnl
+  WEBP_VPX_DIR=""
   if test "$PHP_WEBP_VPX_DIR" != "yes"; then
+    AC_MSG_CHECKING([for vpx/vp8.h])
     if test -r "$PHP_WEBP_VPX_DIR/include/vpx/vp8.h"; then
-      PHP_WEBP_VPX_DIR="$PHP_WEBP_VPX_DIR"
+      WEBP_VPX_DIR="$PHP_WEBP_VPX_DIR"
+      AC_MSG_RESULT([yes])
     fi
   else
-    AC_MSG_CHECKING([for webp-vpx-dir in default path])
+    AC_MSG_CHECKING([for vpx/vp8.h in default path])
     for i in /usr /usr/local; do
       if test -r "$i/include/vpx/vp8.h"; then
-        PHP_WEBP_VPX_DIR=$i
+        WEBP_VPX_DIR=$i
         AC_MSG_RESULT([found in $i])
         break
       fi
     done
-    if test "x" = "x$PHP_WEBP_VPX_DIR"; then
-      AC_MSG_ERROR([not found])
-    fi
+  fi
+  if test "x" = "x$WEBP_VPX_DIR"; then
+    AC_MSG_ERROR([not found])
   fi
 
-  PHP_ADD_INCLUDE($PHP_WEBP_VPX_DIR/include)
-  PHP_ADD_LIBRARY_WITH_PATH(vpx, $PHP_WEBP_VPX_DIR/lib, WEBP_SHARED_LIBADD)
+  PHP_ADD_INCLUDE($WEBP_VPX_DIR/include)
+  PHP_ADD_LIBRARY_WITH_PATH(vpx, $WEBP_VPX_DIR/lib, WEBP_SHARED_LIBADD)
 
   export CPPFLAGS="$OLD_CPPFLAGS"
 
@@ -48,5 +51,4 @@ if test "$PHP_WEBP" != "no"; then
   AC_DEFINE(HAVE_WEBP, 1, [ ])
 
   PHP_NEW_EXTENSION(webp, webp.c libwebp/src/webpimg.c, $ext_shared)
-
 fi
