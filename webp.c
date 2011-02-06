@@ -31,15 +31,18 @@
 #include "libwebp/src/webpimg.h"
 
 #define MAX_IMAGE_SIDE_LENGTH 16384
-#define DEFAULT_QUALITY 20
-#define MAX_QUALITY 63
-#define MIN_QUALITY 0
+#define DEFAULT_QP 20
+#define MAX_QP 63
+#define MIN_QP 0
+#define CALC_QUALITY(qp) (long)(100.0 * (float)(MAX_QP - (qp)) / (float)MAX_QP)
+#define CALC_QP(quality) (int)((float)MAX_QP * (1.0 - (float)(quality) / 100.0))
 
 /* {{{ globals */
 
-static int le_gd;
-#ifdef PHP_WEBP_USE_GD_WREPPER
-static int le_fake;
+static long default_quality = -1;
+static int le_gd = -1;
+#ifdef GD_API_IS_HIDDEN
+static int le_fake = -1;
 static ZEND_DECLARE_MODULE_GLOBALS(webp);
 #endif
 
@@ -54,7 +57,7 @@ _pwp_stream_open(const char *filename, const char *mode,
 #define pwp_url_open(filename, mode, opened_path) \
 	_pwp_stream_open(filename, mode, 0, opened_path TSRMLS_CC)
 
-#ifdef PHP_WEBP_USE_GD_WREPPER
+#ifdef GD_API_IS_HIDDEN
 static gdImagePtr
 _pwp_gdImageCreateTrueColor(int sx, int sy);
 #undef gdImageCreateTrueColor
@@ -65,7 +68,7 @@ _pwp_gdImageCreateTrueColor(int sx, int sy);
 /* {{{ module function prototypes */
 
 static PHP_MINIT_FUNCTION(webp);
-#ifdef PHP_WEBP_USE_GD_WREPPER
+#ifdef GD_API_IS_HIDDEN
 static PHP_RINIT_FUNCTION(webp);
 static PHP_RSHUTDOWN_FUNCTION(webp);
 #endif
@@ -125,7 +128,7 @@ static zend_module_entry webp_module_entry = {
 	webp_functions,
 	PHP_MINIT(webp),
 	NULL,
-#ifdef PHP_WEBP_USE_GD_WREPPER
+#ifdef GD_API_IS_HIDDEN
 	PHP_RINIT(webp),
 	PHP_RSHUTDOWN(webp),
 #else
@@ -147,21 +150,19 @@ ZEND_GET_MODULE(webp)
 static PHP_MINIT_FUNCTION(webp)
 {
 	le_gd = phpi_get_le_gd();
-#ifdef PHP_WEBP_USE_GD_WREPPER
+#ifdef GD_API_IS_HIDDEN
 	le_fake = zend_register_list_destructors(NULL, NULL, module_number);
 #endif
 
-#define WEBP_REGISTER_CONSTANT(name) \
-	REGISTER_LONG_CONSTANT("WEBP_" #name, name, CONST_PERSISTENT | CONST_CS)
-	WEBP_REGISTER_CONSTANT(DEFAULT_QUALITY);
-	WEBP_REGISTER_CONSTANT(MAX_QUALITY);
-	WEBP_REGISTER_CONSTANT(MIN_QUALITY);
+	default_quality = CALC_QUALITY(DEFAULT_QP);
+	REGISTER_LONG_CONSTANT("WEBP_DEFAULT_QUALITY",
+			default_quality, CONST_PERSISTENT | CONST_CS);
 
 	return SUCCESS;
 }
 
 /* }}} */
-#ifdef PHP_WEBP_USE_GD_WREPPER
+#ifdef GD_API_IS_HIDDEN
 /* {{{ PHP_RINIT_FUNCTION */
 
 static PHP_RINIT_FUNCTION(webp)
@@ -228,9 +229,9 @@ static PHP_FUNCTION(imagecreatefromwebp)
 	size_t data_size;
 
 	gdImagePtr im;
-	uint32 *pixdata;
-	const uint32 *pixptr;
-	uint8 *Y = NULL, *U = NULL, *V = NULL;
+	uint32 *pix_buf;
+	const uint32 *pix_ptr;
+	uint8 *y_ptr = NULL, *u_ptr = NULL, *v_ptr = NULL;
 	int x, y, width, height, words_per_line;
 	WebPResult result;
 
@@ -250,9 +251,11 @@ static PHP_FUNCTION(imagecreatefromwebp)
 	}
 
 	result = WebPDecode((const uint8 *)data, (int)data_size,
-			&Y, &U, &V, &width, &height);
+			&y_ptr, &u_ptr, &v_ptr, &width, &height);
 	if (result == webp_failure) {
-		if (Y) { free(Y); }
+		if (y_ptr) {
+			free(y_ptr);
+		}
 		efree(data);
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to decode WebP image");
 		RETURN_FALSE;
@@ -260,40 +263,41 @@ static PHP_FUNCTION(imagecreatefromwebp)
 	efree(data);
 
 	words_per_line = width;
-	pixdata = (uint32 *)ecalloc((size_t)(width * height), sizeof(uint32));
-	if (!pixdata) {
-		free(Y);
+	pix_buf = (uint32 *)ecalloc((size_t)(width * height), sizeof(uint32));
+	if (!pix_buf) {
+		free(y_ptr);
 		php_error(E_ERROR, "Failed to allocate memory");
 		RETURN_FALSE;
 	}
 
-	YUV420toRGBA(Y, U, V, words_per_line, width, height, pixdata);
-	free(Y);
+	YUV420toRGBA(y_ptr, u_ptr, v_ptr, words_per_line, width, height, pix_buf);
+	free(y_ptr);
 
 	im = gdImageCreateTrueColor(width, height);
 	if (!im) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to create image");
-		efree(pixdata);
+		efree(pix_buf);
 		RETURN_FALSE;
 	}
 
-	pixptr = pixdata;
+	pix_ptr = pix_buf;
 	for (y = 0; y < height; y++) {
 		for (x = 0; x < width; x++) {
-			im->tpixels[y][x] = (int)(*pixptr >> 8);
-			pixptr++;
+			im->tpixels[y][x] = (int)(*pix_ptr >> 8);
+			pix_ptr++;
 		}
 	}
 
 	ZEND_REGISTER_RESOURCE(return_value, im, le_gd);
-	efree(pixdata);
+	efree(pix_buf);
 }
 
 /* }}} */
 /* {{{ imagewebp() */
 
 /**
- * bool imagewebp(resource image [, string filename = NULL [, int quality = 20 [, float &difference = NULL] ]])
+ * bool imagewebp(resource image [, string filename = NULL
+ *     [, int quality = WEBP_DEFAULT_QUALITY [, float &difference = NULL] ]])
  * Output image to browser or file.
  */
 static PHP_FUNCTION(imagewebp)
@@ -305,33 +309,33 @@ static PHP_FUNCTION(imagewebp)
 	char *opened_path = NULL;
 	php_stream *stream;
 	size_t output_size;
-	long quality = DEFAULT_QUALITY;
-	int QP;
+	long quality = default_quality;
+	int qp;
 	zval *difference = NULL;
 
 	int x, y, width, height, words_per_line;
 	int uv_width, uv_height, uv_words_per_line;
 	size_t y_nmemb, uv_nmemb;
-	uint32 *pixdata, *pixptr;
-	uint8 *Y, *U, *V;
+	uint32 *pix_buf, *pix_ptr;
+	uint8 *yuv_buf, *y_ptr, *u_ptr, *v_ptr;
 	WebPResult result;
 	unsigned char *out = NULL;
 	int out_size_bytes = 0;
 	double snr = 0.0;
 
 	if (FAILURE == zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC,
-			"r|slz", &image, &filename, &filename_len, &quality, &difference)
+			"r|s!lz", &image, &filename, &filename_len, &quality, &difference)
 	) {
 		return;
 	}
 	ZEND_FETCH_RESOURCE(im, gdImagePtr, &image, -1, "Image", le_gd);
 
-	if (quality < MIN_QUALITY) {
-		QP = MIN_QUALITY;
-	} else if (quality > MAX_QUALITY) {
-		QP = MAX_QUALITY;
+	if (quality >= 100L) {
+		qp = MIN_QP;
+	} else if (quality <= 0L) {
+		qp = MAX_QP;
 	} else {
-		QP = (int)quality;
+		qp = CALC_QP(quality);
 	}
 
 	width = gdImageSX(im);
@@ -345,23 +349,28 @@ static PHP_FUNCTION(imagewebp)
 	uv_height = (height + 1) >> 1;
 	y_nmemb = (size_t)(width * height);
 	uv_nmemb = (size_t)(uv_width * uv_height);
-	pixdata = (uint32 *)ecalloc(y_nmemb, sizeof(uint32));
-	Y = (uint8 *)ecalloc(y_nmemb + 2 * uv_nmemb, sizeof(uint8));
-	if (pixdata == NULL || Y == NULL) {
-		if (Y) { efree(Y); }
-		if (pixdata) { efree(pixdata); }
+	pix_buf = (uint32 *)ecalloc(y_nmemb, sizeof(uint32));
+	yuv_buf = (uint8 *)ecalloc(y_nmemb + 2 * uv_nmemb, sizeof(uint8));
+	if (pix_buf == NULL || y_ptr == NULL) {
+		if (yuv_buf) {
+			efree(yuv_buf);
+		}
+		if (pix_buf) {
+			efree(pix_buf);
+		}
 		php_error(E_ERROR, "Failed to allocate memory");
 		RETURN_FALSE;
 	}
-	U = Y + y_nmemb;
-	V = U + uv_nmemb;
+	y_ptr = yuv_buf;
+	u_ptr = y_ptr + y_nmemb;
+	v_ptr = u_ptr + uv_nmemb;
 
-	pixptr = pixdata;
+	pix_ptr = pix_buf;
 	if (gdImageTrueColor(im)) {
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
-				*pixptr = (uint32)gdImageTrueColorPixel(im, x, y) << 8;
-				pixptr++;
+				*pix_ptr = (uint32)gdImageTrueColorPixel(im, x, y) << 8;
+				pix_ptr++;
 			}
 		}
 	} else {
@@ -369,24 +378,24 @@ static PHP_FUNCTION(imagewebp)
 		for (y = 0; y < height; y++) {
 			for (x = 0; x < width; x++) {
 				c = gdImagePalettePixel(im, x, y);
-				*pixptr = (((uint32)im->red[c]) << 24)
+				*pix_ptr = (((uint32)im->red[c]) << 24)
 						| (((uint32)im->green[c]) << 16)
 						| (((uint32)im->blue[c]) << 8);
-				pixptr++;
+				pix_ptr++;
 			}
 		}
 	}
 
 	words_per_line = width;
 	uv_words_per_line = uv_width;
-	RGBAToYUV420(pixdata, words_per_line, width, height, Y, U, V);
-	result = WebPEncode(Y, U, V,
+	RGBAToYUV420(pix_buf, words_per_line, width, height, y_ptr, u_ptr, v_ptr);
+	result = WebPEncode(y_ptr, u_ptr, v_ptr,
 			width, height, words_per_line,
 			uv_width, uv_height, uv_words_per_line,
-			QP, &out, &out_size_bytes, &snr);
+			qp, &out, &out_size_bytes, &snr);
 
-	efree(Y);
-	efree(pixdata);
+	efree(yuv_buf);
+	efree(pix_buf);
 
 	if (result == webp_failure) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to encode WebP image");
@@ -455,7 +464,7 @@ _pwp_stream_open(const char *filename, const char *mode,
 }
 
 /* }}} */
-#ifdef PHP_WEBP_USE_GD_WREPPER
+#ifdef GD_API_IS_HIDDEN
 /* {{{ _pwp_gdImageCreateTrueColor() */
 
 static gdImagePtr

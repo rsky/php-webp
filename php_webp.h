@@ -51,7 +51,7 @@ extern "C" {
 #include <ext/gd/libgd/gdhelpers.h>
 
 #if PHP_VERSION_ID >= 50300
-#define PHP_WEBP_USE_GD_WREPPER
+#define GD_API_IS_HIDDEN
 
 ZEND_BEGIN_MODULE_GLOBALS(webp)
 	zval *ict_name;
