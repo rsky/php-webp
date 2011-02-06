@@ -330,10 +330,12 @@ static PHP_FUNCTION(imagewebp)
 	}
 	ZEND_FETCH_RESOURCE(im, gdImagePtr, &image, -1, "Image", le_gd);
 
-	if (quality >= 100L) {
-		qp = MIN_QP;
+	if (quality == default_quality) {
+		qp = DEFAULT_QP;
 	} else if (quality <= 0L) {
 		qp = MAX_QP;
+	} else if (quality >= 100L) {
+		qp = MIN_QP;
 	} else {
 		qp = CALC_QP(quality);
 	}
@@ -392,7 +394,8 @@ static PHP_FUNCTION(imagewebp)
 	result = WebPEncode(y_ptr, u_ptr, v_ptr,
 			width, height, words_per_line,
 			uv_width, uv_height, uv_words_per_line,
-			qp, &out, &out_size_bytes, &snr);
+			qp, &out, &out_size_bytes,
+			difference ? &snr : NULL);
 
 	efree(yuv_buf);
 	efree(pix_buf);
